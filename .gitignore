@@ -1,0 +1,15 @@
+# secrets and downloaded mail
+.env
+data/
+
+# IDE / editor / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+# python
+__pycache__/
+*.pyc
+
+*.log

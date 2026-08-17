@@ -1,0 +1,65 @@
+# Dovecot 2.3 - local backup store.
+# Reachable only on the internal compose network; it exists so imapsync has an
+# IMAP endpoint to write the downloaded mail into.
+
+protocols = imap
+listen = *
+log_path = /dev/stderr
+info_log_path = /dev/stderr
+log_timestamp = "%Y-%m-%d %H:%M:%S "
+
+ssl = no
+disable_plaintext_auth = no
+auth_mechanisms = plain login
+auth_username_format = %Lu
+
+mail_location = maildir:~/Maildir
+mail_uid = @@VMAIL_UID@@
+mail_gid = @@VMAIL_GID@@
+first_valid_uid = 100
+mail_plugins =
+
+# Big mailboxes: never let a slow client trip these.
+mail_max_userip_connections = 50
+imap_idle_notify_interval = 4 mins
+
+namespace inbox {
+  inbox = yes
+  separator = .
+  prefix =
+}
+
+# Any user name is accepted; the shared master password guards the service.
+passdb {
+  driver = static
+  args = password=@@MASTER_PASSWORD@@ allow_all_users=yes
+}
+
+userdb {
+  driver = static
+  args = uid=@@VMAIL_UID@@ gid=@@VMAIL_GID@@ home=/srv/mail/%u
+}
+
+service imap-login {
+  inet_listener imap {
+    port = 143
+  }
+  service_count = 0
+  process_min_avail = 2
+}
+
+service imap {
+  vsz_limit = 1G
+}
+
+service auth {
+  unix_listener auth-userdb {
+    mode = 0600
+    user = @@VMAIL_USER@@
+  }
+}
+
+protocol imap {
+  mail_max_userip_connections = 50
+  imap_capability = +XLIST
+}

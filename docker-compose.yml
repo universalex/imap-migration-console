@@ -1,0 +1,42 @@
+name: imap-backup
+
+services:
+  dovecot:
+    build: ./dovecot
+    image: imap-backup/dovecot:latest
+    restart: unless-stopped
+    environment:
+      DOVECOT_MASTER_PASSWORD: ${DOVECOT_MASTER_PASSWORD:?set DOVECOT_MASTER_PASSWORD in .env}
+      VMAIL_UID: ${VMAIL_UID:-1000}
+      VMAIL_GID: ${VMAIL_GID:-1000}
+    volumes:
+      - ./data/mail:/srv/mail
+    # No published port on purpose: the store is only reachable from `app`.
+    expose:
+      - "143"
+
+  app:
+    build:
+      context: ./app
+      args:
+        IMAPSYNC_VERSION: ${IMAPSYNC_VERSION:-imapsync-2.314}
+    image: imap-backup/app:latest
+    restart: unless-stopped
+    depends_on:
+      dovecot:
+        condition: service_healthy
+    environment:
+      DOVECOT_HOST: dovecot
+      DOVECOT_PORT: "143"
+      DOVECOT_MASTER_PASSWORD: ${DOVECOT_MASTER_PASSWORD:?set DOVECOT_MASTER_PASSWORD in .env}
+      SECRET_KEY: ${SECRET_KEY:-}
+      AUTH_USER: ${AUTH_USER:-}
+      AUTH_PASSWORD: ${AUTH_PASSWORD:-}
+      MAX_CONCURRENT_JOBS: ${MAX_CONCURRENT_JOBS:-2}
+      IMAP_TIMEOUT: ${IMAP_TIMEOUT:-180}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - ./data/mail:/srv/mail
+      - ./data/app:/data
+    ports:
+      - "${WEB_PORT:-8080}:8000"

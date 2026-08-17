@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IMAP Backup Console</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>📥</text></svg>">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">⇄</div>
+    <div>
+      <h1>IMAP Backup Console</h1>
+      <p class="sub" id="brand-sub">imapsync · local Maildir store</p>
+    </div>
+  </div>
+  <div class="chips" id="chips"></div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button class="tab is-active" data-tab="backup">New backup</button>
+  <button class="tab" data-tab="mailboxes">Mailboxes <span class="badge" id="badge-mailboxes">0</span></button>
+  <button class="tab" data-tab="jobs">Jobs <span class="badge" id="badge-jobs">0</span></button>
+</nav>
+
+<main>
+  <!-- ------------------------------------------------------------ backup -->
+  <section class="panel is-active" id="panel-backup">
+    <form class="card" id="backup-form">
+      <div class="card-head">
+        <h2>Source server</h2>
+        <p>Where the mail is pulled from. All accounts in this batch use the same server.</p>
+      </div>
+      <div class="grid three">
+        <label>Host
+          <input id="bk-host" name="host" placeholder="imap.example.com" required autocomplete="off">
+        </label>
+        <label>Encryption
+          <select id="bk-security" data-port="bk-port">
+            <option value="ssl">SSL/TLS — port 993</option>
+            <option value="starttls">STARTTLS — port 143</option>
+            <option value="plain">None — port 143</option>
+          </select>
+        </label>
+        <label>Port <span class="hint">optional</span>
+          <input id="bk-port" type="number" min="1" max="65535" placeholder="993" autocomplete="off">
+        </label>
+      </div>
+
+      <div class="card-head spaced">
+        <h2>Accounts</h2>
+        <p>One per line: <code>address;password</code> — or <code>address;password;login</code>
+           when the IMAP login differs from the address.
+           <code>,</code> <code>:</code> tab and space work as separators too.</p>
+      </div>
+      <textarea id="bk-credentials" rows="9" spellcheck="false" autocomplete="off"
+        placeholder="anna@example.com;S3cret!
+ben@example.com;hunter2
+info@example.com;pw with spaces;info"></textarea>
+
+      <details class="advanced">
+        <summary>Advanced imapsync options</summary>
+        <div class="grid two">
+          <label>Exclude folders <span class="hint">regex, one per line</span>
+            <textarea id="bk-exclude" rows="3" spellcheck="false" placeholder="^Junk$&#10;^\[Gmail\]/All Mail$"></textarea>
+          </label>
+          <label>Only these folders <span class="hint">exact names, one per line</span>
+            <textarea id="bk-folders" rows="3" spellcheck="false" placeholder="INBOX&#10;INBOX/Archive"></textarea>
+          </label>
+        </div>
+        <label>Extra arguments <span class="hint">passed to imapsync verbatim</span>
+          <input id="bk-extra_args" spellcheck="false" autocomplete="off" placeholder="--maxage 3650 --skipcrossduplicates">
+        </label>
+        <div class="checks">
+          <label class="check"><input type="checkbox" id="bk-automap" checked> <span>Automap special folders (Sent, Drafts, Trash…)</span></label>
+          <label class="check"><input type="checkbox" id="bk-insecure_tls"> <span>Accept invalid/self-signed certificates</span></label>
+          <label class="check"><input type="checkbox" id="bk-dry_run"> <span>Dry run (copy nothing, just report)</span></label>
+        </div>
+      </details>
+
+      <div class="card-actions">
+        <button type="button" class="btn ghost" id="btn-check">Test logins only</button>
+        <button type="button" class="btn ghost" id="btn-import">Add without syncing</button>
+        <button type="submit" class="btn primary">Start backup</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- --------------------------------------------------------- mailboxes -->
+  <section class="panel" id="panel-mailboxes">
+    <div class="toolbar">
+      <div class="bulkbar" id="bulkbar" hidden>
+        <strong><span id="sel-count">0</span> selected</strong>
+        <button class="btn small" data-bulk="backup">Back up</button>
+        <button class="btn small" data-bulk="restore">Restore…</button>
+        <button class="btn small" data-bulk="check">Test logins</button>
+        <button class="btn small danger" data-bulk="delete">Delete</button>
+      </div>
+      <input class="filter" id="mailbox-filter" placeholder="Filter accounts…" autocomplete="off">
+    </div>
+    <div class="tablewrap">
+      <table id="mailbox-table">
+        <thead>
+          <tr>
+            <th class="tick"><input type="checkbox" id="select-all"></th>
+            <th>Account</th>
+            <th>Local mailbox</th>
+            <th class="num">Folders</th>
+            <th class="num">Messages</th>
+            <th class="num">Size</th>
+            <th>Last backup</th>
+            <th>Status</th>
+            <th class="right">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="mailbox-body"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- -------------------------------------------------------------- jobs -->
+  <section class="panel" id="panel-jobs">
+    <div class="tablewrap">
+      <table id="jobs-table">
+        <thead>
+          <tr>
+            <th>Job</th>
+            <th>Account</th>
+            <th>Type</th>
+            <th>Status</th>
+            <th>Started</th>
+            <th>Duration</th>
+            <th>Result</th>
+            <th class="right">Protocol</th>
+          </tr>
+        </thead>
+        <tbody id="jobs-body"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<!-- ------------------------------------------------------------- drawer -->
+<aside class="drawer" id="log-drawer" hidden>
+  <header>
+    <div>
+      <h3 id="log-title">imapsync protocol</h3>
+      <p class="sub" id="log-sub"></p>
+    </div>
+    <div class="drawer-actions">
+      <label class="check"><input type="checkbox" id="log-follow" checked> <span>Follow</span></label>
+      <a class="btn small" id="log-download" href="#" download>Download</a>
+      <button class="btn small danger" id="log-cancel">Cancel job</button>
+      <button class="btn small ghost" id="log-close">Close</button>
+    </div>
+  </header>
+  <pre id="log-body"></pre>
+</aside>
+
+<!-- ------------------------------------------------------------- modals -->
+<div class="modal" id="restore-modal" hidden>
+  <div class="modal-card">
+    <header>
+      <h3>Restore to a target server</h3>
+      <button class="btn small ghost" data-close>Close</button>
+    </header>
+    <div class="modal-body">
+      <p class="note" id="restore-summary"></p>
+      <div class="grid three">
+        <label>Target host
+          <input id="rs-host" placeholder="imap.newserver.com" autocomplete="off">
+        </label>
+        <label>Encryption
+          <select id="rs-security" data-port="rs-port">
+            <option value="ssl">SSL/TLS — port 993</option>
+            <option value="starttls">STARTTLS — port 143</option>
+            <option value="plain">None — port 143</option>
+          </select>
+        </label>
+        <label>Port <span class="hint">optional</span>
+          <input id="rs-port" type="number" min="1" max="65535" placeholder="993" autocomplete="off">
+        </label>
+      </div>
+      <div class="grid two">
+        <label>Login name on target
+          <select id="rs-user_mode">
+            <option value="email">Same as the mail address</option>
+            <option value="source">Same as the source login</option>
+            <option value="mapping">From the list below (3rd field)</option>
+          </select>
+        </label>
+        <label>Passwords on target
+          <select id="rs-password_mode">
+            <option value="mapping">One per account (list below)</option>
+            <option value="single">One password for all accounts</option>
+          </select>
+        </label>
+      </div>
+      <label id="rs-single-wrap" hidden>Password for all accounts
+        <input id="rs-single_password" type="password" autocomplete="new-password">
+      </label>
+      <label id="rs-mapping-wrap">Target credentials <span class="hint">address;password[;login]</span>
+        <textarea id="rs-mapping" rows="6" spellcheck="false" autocomplete="off"
+          placeholder="anna@example.com;newpassword"></textarea>
+      </label>
+      <details class="advanced">
+        <summary>Advanced imapsync options</summary>
+        <div class="grid two">
+          <label>Exclude folders <span class="hint">regex, one per line</span>
+            <textarea id="rs-exclude" rows="3" spellcheck="false"></textarea>
+          </label>
+          <label>Only these folders <span class="hint">exact names, one per line</span>
+            <textarea id="rs-folders" rows="3" spellcheck="false"></textarea>
+          </label>
+        </div>
+        <label>Extra arguments
+          <input id="rs-extra_args" spellcheck="false" autocomplete="off">
+        </label>
+        <div class="checks">
+          <label class="check"><input type="checkbox" id="rs-automap" checked> <span>Automap special folders</span></label>
+          <label class="check"><input type="checkbox" id="rs-insecure_tls"> <span>Accept invalid/self-signed certificates</span></label>
+          <label class="check"><input type="checkbox" id="rs-dry_run"> <span>Dry run</span></label>
+        </div>
+      </details>
+    </div>
+    <footer>
+      <button class="btn ghost" data-close>Cancel</button>
+      <button class="btn primary" id="btn-restore">Start restore</button>
+    </footer>
+  </div>
+</div>
+
+<div class="modal" id="detail-modal" hidden>
+  <div class="modal-card">
+    <header>
+      <h3 id="detail-title">Mailbox</h3>
+      <button class="btn small ghost" data-close>Close</button>
+    </header>
+    <div class="modal-body" id="detail-body"></div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

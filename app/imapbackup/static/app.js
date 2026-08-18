@@ -16,8 +16,13 @@ const state = {
 
 async function api(path, options = {}) {
   const res = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
     ...options,
+    headers: {
+      "Content-Type": "application/json",
+      // Cross-site pages cannot set this, which is what blocks CSRF.
+      "X-Requested-With": "imapbackup",
+      ...(options.headers || {}),
+    },
   });
   if (!res.ok) {
     let detail = `${res.status} ${res.statusText}`;
@@ -216,6 +221,16 @@ function renderChips(data) {
   $("#chips").innerHTML = html;
   $("#brand-sub").textContent =
     `imapsync · ${data.config.concurrency} parallel jobs · store ${data.config.store}`;
+
+  if (data.config.allow_extra_args === false) {
+    ["bk-extra_args", "rs-extra_args"].forEach((id) => {
+      const field = $(`#${id}`);
+      if (!field || field.disabled) return;
+      field.disabled = true;
+      field.value = "";
+      field.placeholder = "disabled on this instance (ALLOW_EXTRA_ARGS=0)";
+    });
+  }
 }
 
 function renderMailboxes(data) {

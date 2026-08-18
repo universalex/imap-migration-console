@@ -26,6 +26,13 @@ DOVECOT_PORT = _int("DOVECOT_PORT", 143)
 DOVECOT_MASTER_PASSWORD = os.environ.get("DOVECOT_MASTER_PASSWORD", "")
 
 IMAPSYNC_BIN = os.environ.get("IMAPSYNC_BIN", "/usr/local/bin/imapsync")
+
+# The "Extra arguments" field hands arguments straight to imapsync, which can
+# run shell commands (--pipemess) and delete mail on the source (--delete1).
+# Set ALLOW_EXTRA_ARGS=0 on any deployment that is not strictly single-admin.
+ALLOW_EXTRA_ARGS = os.environ.get("ALLOW_EXTRA_ARGS", "1").strip().lower() not in (
+    "0", "false", "no", "off",
+)
 MAX_CONCURRENT_JOBS = max(1, _int("MAX_CONCURRENT_JOBS", 2))
 IMAP_TIMEOUT = _int("IMAP_TIMEOUT", 180)
 

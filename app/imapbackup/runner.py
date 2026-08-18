@@ -223,6 +223,11 @@ class JobRunner:
 
         extra = (options.get("extra_args") or "").strip()
         if extra:
+            if not config.ALLOW_EXTRA_ARGS:
+                raise RuntimeError(
+                    "Extra imapsync arguments are disabled on this instance "
+                    "(ALLOW_EXTRA_ARGS=0)."
+                )
             cmd += shlex.split(extra)
 
         return cmd, direction

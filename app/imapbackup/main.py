@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Query, Request, Response
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -117,6 +117,31 @@ async def _periodic_rescan() -> None:
 
 app = FastAPI(title="IMAP Backup Console", version=config.VERSION,
               lifespan=lifespan, docs_url="/api/docs", openapi_url="/api/openapi.json")
+
+
+SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+
+
+@app.middleware("http")
+async def csrf_guard(request: Request, call_next):
+    """Block state changes triggered from another site.
+
+    A cross-site form POST cannot set a custom header, and a cross-site fetch
+    with one needs a CORS preflight that this app never answers. Browsers set
+    Sec-Fetch-Site themselves, so it cannot be forged either.
+    """
+    if request.method not in SAFE_METHODS:
+        same_site = request.headers.get("sec-fetch-site", "") in ("same-origin", "none")
+        asked = request.headers.get("x-requested-with", "").lower() == "imapbackup"
+        if not (same_site or asked):
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "detail": "Cross-site request blocked. Send the header "
+                              "'X-Requested-With: imapbackup'."
+                },
+            )
+    return await call_next(request)
 
 
 @app.middleware("http")
@@ -281,6 +306,7 @@ async def state() -> dict:
             "version": config.VERSION,
             "concurrency": config.MAX_CONCURRENT_JOBS,
             "store": str(config.MAILDIR_ROOT),
+            "allow_extra_args": config.ALLOW_EXTRA_ARGS,
         },
     }
 
